@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Timeout } from '@nestjs/schedule';
+import { Interval, Timeout } from '@nestjs/schedule';
 import { AppService } from './app.service';
 import * as AWS from 'aws-sdk';
 import got from 'got';
@@ -23,7 +23,7 @@ export class AppController {
     this.client = new AWS.DynamoDB.DocumentClient();
   }
 
-  @Timeout(5000)
+  @Interval(5000)
   async scrape() {
     const lastSeenData = await this.client
       .get({
@@ -34,8 +34,8 @@ export class AppController {
       })
       .promise();
     if (lastSeenData.Item) {
-      if ('date' in lastSeenData.Item) {
-        const lastSeen = lastSeenData.Item?.date;
+      if ('lastSeen' in lastSeenData.Item) {
+        const lastSeen = lastSeenData.Item?.lastSeen;
         const response = await got(
           'http://www.openinsider.com/latest-insider-trading',
         );
@@ -77,9 +77,23 @@ export class AppController {
               qty: qty.replace('-', ''),
               value: value.replace('-', ''),
             };
-            console.log(payload);
+            if (new Date(fillingDate) > new Date(lastSeen)) {
+              console.log(payload);
+            }
           });
         });
+        await this.client
+          .update({
+            TableName: 'insiderBot',
+            Key: {
+              PartitionKey: 'lastSeen',
+            },
+            UpdateExpression: 'set lastSeen = :r',
+            ExpressionAttributeValues: {
+              ':r': new Date().toString(),
+            },
+          })
+          .promise();
       }
     }
     const chatIdsData = await this.client
@@ -93,7 +107,6 @@ export class AppController {
     if (chatIdsData.Item) {
       if ('ids' in chatIdsData.Item) {
         const chatIds = chatIdsData.Item?.ids.values;
-        console.log(chatIds);
       }
     }
     return;
