@@ -1,8 +1,10 @@
 import { Controller } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Interval } from '@nestjs/schedule';
+import { Timeout } from '@nestjs/schedule';
 import { AppService } from './app.service';
 import * as AWS from 'aws-sdk';
+import got from 'got';
+import * as cheerio from 'cheerio';
 
 @Controller()
 export class AppController {
@@ -21,7 +23,7 @@ export class AppController {
     this.client = new AWS.DynamoDB.DocumentClient();
   }
 
-  @Interval(5000)
+  @Timeout(5000)
   async scrape() {
     const lastSeenData = await this.client
       .get({
@@ -34,7 +36,50 @@ export class AppController {
     if (lastSeenData.Item) {
       if ('date' in lastSeenData.Item) {
         const lastSeen = lastSeenData.Item?.date;
-        console.log(lastSeen);
+        const response = await got(
+          'http://www.openinsider.com/latest-insider-trading',
+        );
+        const $ = cheerio.load(response.body);
+        $('table.tinytable tbody').each((i, item) => {
+          $('tr', item).each((i, item) => {
+            let trade = '';
+            $('td', item).each((i, item) => {
+              trade += `${$(item).text().trim()}|`;
+            });
+            const [
+              X,
+              fillingDate,
+              tradeDate,
+              ticker,
+              companyName,
+              insiderName,
+              title,
+              tradeType,
+              price,
+              qty,
+              owned,
+              ownUp,
+              value,
+              day,
+              week,
+              month,
+              sixMonths,
+            ] = trade.split('|');
+            const payload = {
+              fillingDate,
+              tradeDate,
+              symbol: ticker,
+              companyName,
+              insiderName,
+              title,
+              tradeType,
+              price,
+              qty: qty.replace('-', ''),
+              value: value.replace('-', ''),
+            };
+            console.log(payload);
+          });
+        });
       }
     }
     const chatIdsData = await this.client
