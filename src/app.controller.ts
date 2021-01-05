@@ -23,7 +23,21 @@ export class AppController {
 
   @Interval(5000)
   async scrape() {
-    const data = await this.client
+    const lastSeenData = await this.client
+      .get({
+        TableName: 'insiderBot',
+        Key: {
+          PartitionKey: 'lastSeen',
+        },
+      })
+      .promise();
+    if (lastSeenData.Item) {
+      if ('date' in lastSeenData.Item) {
+        const lastSeen = lastSeenData.Item?.date;
+        console.log(lastSeen);
+      }
+    }
+    const chatIdsData = await this.client
       .get({
         TableName: 'insiderBot',
         Key: {
@@ -31,7 +45,12 @@ export class AppController {
         },
       })
       .promise();
-    const chatIds = data.Item?.ids.values;
+    if (chatIdsData.Item) {
+      if ('ids' in chatIdsData.Item) {
+        const chatIds = chatIdsData.Item?.ids.values;
+        console.log(chatIds);
+      }
+    }
     return;
   }
 }
