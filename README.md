@@ -1,0 +1,3 @@
+# Insidebot
+
+Information is power.
