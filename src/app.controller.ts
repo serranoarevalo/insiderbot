@@ -1,6 +1,6 @@
-import { Controller } from '@nestjs/common';
+import { Body, Controller, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Interval, Timeout } from '@nestjs/schedule';
+import { Interval } from '@nestjs/schedule';
 import { AppService } from './app.service';
 import * as AWS from 'aws-sdk';
 import got from 'got';
@@ -23,6 +23,41 @@ export class AppController {
     this.client = new AWS.DynamoDB.DocumentClient();
   }
 
+  @Post('/updates')
+  async getUpdates(@Body() body) {
+    const { message } = body;
+    if (message) {
+      const { text, chat } = message;
+      console.log(chat);
+      if (text === '/start') {
+        await got.post(
+          `https://api.telegram.org/${this.configService.get(
+            'TELEGRAM_TOKEN',
+          )}/sendMessage`,
+          {
+            json: {
+              chat_id: chat.id,
+              text:
+                'Welcome to Insider Nico Bot💖\nYou are now subscribed to insider trade alerts!',
+            },
+          },
+        );
+        await this.client
+          .update({
+            TableName: 'insiderBot',
+            Key: {
+              PartitionKey: 'chatIds',
+            },
+            UpdateExpression: 'set ids = list_append(ids, :i)',
+            ExpressionAttributeValues: {
+              ':i': [chat.id],
+            },
+          })
+          .promise();
+      }
+    }
+  }
+
   @Interval(5000)
   async scrape() {
     const lastSeenData = await this.client
@@ -40,6 +75,7 @@ export class AppController {
           'http://www.openinsider.com/latest-insider-trading',
         );
         const $ = cheerio.load(response.body);
+        let lastStock = 0;
         $('table.tinytable tbody').each((i, item) => {
           $('tr', item).each((i, item) => {
             let trade = '';
@@ -77,23 +113,31 @@ export class AppController {
               qty: qty.replace('-', ''),
               value: value.replace('-', ''),
             };
-            if (new Date(fillingDate) > new Date(lastSeen)) {
+
+            if (new Date(fillingDate).getTime() > lastSeen) {
               console.log(payload);
+              if (lastStock === 0) {
+                lastStock = new Date(fillingDate).getTime();
+              }
             }
           });
         });
-        await this.client
-          .update({
-            TableName: 'insiderBot',
-            Key: {
-              PartitionKey: 'lastSeen',
-            },
-            UpdateExpression: 'set lastSeen = :r',
-            ExpressionAttributeValues: {
-              ':r': new Date().toString(),
-            },
-          })
-          .promise();
+        if (lastStock !== 0) {
+          await this.client
+            .update({
+              TableName: 'insiderBot',
+              Key: {
+                PartitionKey: 'lastSeen',
+              },
+              UpdateExpression: 'set lastSeen = :r',
+              ExpressionAttributeValues: {
+                ':r': lastStock,
+              },
+            })
+            .promise();
+        } else {
+          console.log('====== NOTHING TO REPORT ======');
+        }
       }
     }
     const chatIdsData = await this.client
@@ -107,6 +151,7 @@ export class AppController {
     if (chatIdsData.Item) {
       if ('ids' in chatIdsData.Item) {
         const chatIds = chatIdsData.Item?.ids.values;
+        console.log(chatIds);
       }
     }
     return;
