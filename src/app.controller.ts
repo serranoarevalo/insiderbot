@@ -34,7 +34,7 @@ export class AppController {
     const chatIds = await this.appService.getChatIds();
     const lastSeen = await this.appService.getLastSeen();
     const response = await got(
-      'http://www.openinsider.com/latest-insider-trading',
+      'http://www.openinsider.com/screener?s=&o=&pl=&ph=&ll=&lh=&fd=730&fdr=&td=0&tdr=&fdlyl=&fdlyh=&daysago=&xp=1&xs=1&vl=100&vh=&ocl=&och=&sic1=-1&sicl=100&sich=9999&grp=0&nfl=&nfh=&nil=&nih=&nol=&noh=&v2l=&v2h=&oc2l=&oc2h=&sortcol=0&cnt=100&page=1',
     );
     const $ = cheerio.load(response.body);
     let lastStock = 0;
@@ -72,8 +72,8 @@ export class AppController {
           title,
           tradeType,
           price,
-          qty: qty.replace('-', ''),
-          value: value.replace('-', ''),
+          qty: qty.replace('-', '').replace('+', ''),
+          value: value.replace('-', '').replace('+', ''),
         };
 
         if (new Date(fillingDate).getTime() > parseInt(lastSeen)) {
@@ -82,7 +82,7 @@ export class AppController {
           }
           chatIds.forEach(async (id) => {
             await this.appService.sendMessage(
-              `🚨*Insider Trade Alert*🚨\n\n*Filling Date*: ${payload.fillingDate} \n*Trade Date*: ${payload.tradeDate} \n*Ticker*: ${payload.symbol} \n*Company Name*: ${payload.companyName} \n*Insider Name*: ${payload.insiderName} \n*Title*: ${payload.title} \n*Trade Type*: ${payload.tradeType} \n*Price*: ${payload.price} \n*Qty*: ${payload.qty}\n*Value*: 🤑${payload.value}\n`,
+              `🚨*Insider Trade Alert*🚨\n\n*Filling Date*: ${payload.fillingDate} \n*Trade Date*: ${payload.tradeDate} \n*Ticker*: ${payload.symbol} \n*Company Name*: ${payload.companyName} \n*Insider Name*: ${payload.insiderName} \n*Title*: ${payload.title} \n*Trade Type*: ⚠️${payload.tradeType}⚠️ \n*Price*: ${payload.price} \n*Qty*: ${payload.qty}\n*Value*: 🔥${payload.value}🔥\n`,
               id,
             );
           });
